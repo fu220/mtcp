@@ -10,6 +10,9 @@
 #include <dirent.h>
 #include <rte_version.h>
 #include <rte_ethdev.h>
+#include <rte_bus_pci.h>
+#include <rte_dev.h>
+#include <rte_bus.h>
 #include "dpdk_iface_common.h"
 /*--------------------------------------------------------------------------*/
 //#define DEBUG				1
@@ -22,7 +25,7 @@
 typedef struct {
 	PciDevice pd;
 	struct rte_eth_dev_info dev_details;
-	struct ether_addr ports_eth_addr;
+	struct rte_ether_addr ports_eth_addr;
 } DevInfo;
 
 static DevInfo di[RTE_MAX_ETHPORTS];	
@@ -258,26 +261,27 @@ main(int argc, char **argv)
 	fprintf(stderr, "Scanning the system for dpdk-compatible devices...");
 	/* initialize the rte env first */
 	ret = rte_eal_init(rte_argc, rte_argv);
+	uint16_t port_id;
 
 	/* get total count of detected ethernet ports */
-	num_devices = rte_eth_dev_count();
-	if (num_devices == 0) {
-		fprintf(stderr, "No Ethernet port detected!\n");
-		exit(EXIT_FAILURE);
-	}
+	RTE_ETH_FOREACH_DEV(port_id) {
+        	if (num_devices >= RTE_MAX_ETHPORTS) {
+            		fprintf(stderr, "Too many DPDK devices, exceeding RTE_MAX_ETHPORTS\n");
+            		break;
+        	}
 
-	for (ret = 0; ret < num_devices; ret++) {
-		di[ret].pd.ports_eth_addr = &di[ret].ports_eth_addr.addr_bytes[0];
-		/* get mac addr entries of detected dpdk ports */
-		rte_eth_macaddr_get(ret, &di[ret].ports_eth_addr);
-		/* check port capabailties/info */
-		rte_eth_dev_info_get(ret, &di[ret].dev_details);
-		/* get numa socket location for future socket-mem field */
-		if ((di[ret].pd.numa_socket=rte_eth_dev_socket_id(ret)) == -1) {
-			fprintf(stderr, "Can't determine socket ID!\n");
-			exit(EXIT_FAILURE);
-		}
-	}
+        	rte_eth_macaddr_get(port_id,(struct rte_ether_addr *)&di[num_devices].ports_eth_addr);
+
+        	rte_eth_dev_info_get(port_id, &di[num_devices].dev_details);
+
+        	di[num_devices].pd.numa_socket = rte_eth_dev_socket_id(port_id);
+        	if (di[num_devices].pd.numa_socket == -1) {
+            		fprintf(stderr, "Can't determine socket ID for port %d!\n", port_id);
+            		di[num_devices].pd.numa_socket = 0;
+        	}
+
+        	num_devices++;
+    	}
 
 	fprintf(stderr, "\033[32m done. \033[0m \n");
 	

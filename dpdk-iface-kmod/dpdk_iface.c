@@ -29,6 +29,7 @@
 #include <linux/uaccess.h>
 #include <linux/if_ether.h>
 #include <linux/etherdevice.h>
+#include <linux/rtnetlink.h>
 #include "dpdk_iface.h"
 /*--------------------------------------------------------------------------*/
 struct stats_struct sarrays[MAX_DEVICES][MAX_QID] = {{{0, 0, 0, 0, 0, 0, 0, 0, 0}}};
@@ -85,38 +86,36 @@ clear_all_netdevices(void)
 	do {
 		dpdk_netdev = NULL;
 		freed = 0;
-		write_lock(&dev_base_lock);
-		netdev = first_net_device(&init_net);
-		while (netdev) {
-			if (strncmp(netdev->name, IFACE_PREFIX,
-				    strlen(IFACE_PREFIX)) == 0) {
-				dpdk_netdev = netdev;
-				break;
-			}
-			netdev = next_net_device(netdev);
-		}
-		write_unlock(&dev_base_lock);
-		if (dpdk_netdev) {
-			unregister_netdev(dpdk_netdev);
-			free_netdev(dpdk_netdev);
-			freed = 1;
-		}
+    rtnl_lock();
+    dpdk_netdev = NULL;
+    for_each_netdev(&init_net, netdev) {
+      if (strncmp(netdev->name, IFACE_PREFIX, strlen(IFACE_PREFIX)) == 0) {
+        dpdk_netdev = netdev;
+        break;
+      }
+    }
+    if(dpdk_netdev) {
+      unregister_netdev(dpdk_netdev);
+      free_netdev(dpdk_netdev);
+      freed = 1;
+    }
+    rtnl_unlock();
 	} while (freed);
 }
 /*--------------------------------------------------------------------------*/
-int
+static int
 igb_net_open(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
 /*--------------------------------------------------------------------------*/
-int
+static int
 igb_net_release(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
 /*--------------------------------------------------------------------------*/
-long
+static long
 igb_net_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
@@ -144,17 +143,15 @@ igb_net_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				     ETH_ALEN);
 		if (!ret) {
 			/* first check whether the entry does not exist */
-			read_lock(&dev_base_lock);
-			netdev = first_net_device(&init_net);
-			while (netdev) {
-				if (memcmp(netdev->dev_addr, mac_addr, ETH_ALEN) == 0) {
-					read_unlock(&dev_base_lock);
-					printk(KERN_ERR "%s: port already registered!\n", THIS_MODULE->name);
-					return -EINVAL;
-				}
-				netdev = next_net_device(netdev);
-			}
-			read_unlock(&dev_base_lock);
+      rtnl_lock();
+      for_each_netdev(&init_net, netdev){
+        if(ether_addr_equal(netdev->dev_addr, mac_addr)) {
+          rtnl_unlock();
+          printk(KERN_ERR "%s:port already registered!\n", THIS_MODULE->name);
+          return -EINVAL;
+        }
+      }
+      rtnl_unlock();
 			
 			/* initialize the corresponding netdev */
 			netdev = alloc_etherdev(sizeof(struct net_adapter));
@@ -204,28 +201,18 @@ igb_net_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				     (PciDevice __user *)arg,
 				     sizeof(PciDevice));
 		if (!ret) {
-			read_lock(&dev_base_lock);
-			netdev = first_net_device(&init_net);
-			while (netdev) {
-				if (strcmp(netdev->name, pd.ifname) == 0) {
-					read_unlock(&dev_base_lock);
-					printk(KERN_INFO "%s: Passing PCI info of %s to user\n",
-					       THIS_MODULE->name, pd.ifname);
-					adapter = netdev_priv(netdev);
-					ret = copy_to_user(&((PciDevice __user *)arg)->pa,
-							   &adapter->pa,
-							   sizeof(struct PciAddress));
-					if (ret) return -1;
-					ret = copy_to_user(&((PciDevice __user *)arg)->numa_socket,
-							   &adapter->numa_socket,
-							   sizeof(adapter->numa_socket));
-					if (ret) return -1;
-					return 0;
-				}
-				netdev = next_net_device(netdev);
-			}
-			read_unlock(&dev_base_lock);
-			ret = -1;
+      rtnl_lock();
+      netdev = dev_get_by_name(&init_net, pd.ifname);
+      if(netdev) {
+        adapter =netdev_priv(netdev);
+        ret = copy_to_user(&((PciDevice __user *)arg)->pa, &adapter->pa, sizeof(struct PciAddress));
+        if(!ret)
+          ret = copy_to_user(&((PciDevice __user *)arg)->numa_socket, &adapter->numa_socket, sizeof(adapter->numa_socket));
+        rtnl_unlock();
+        return ret ? -1:0;
+      }
+      rtnl_unlock();
+      ret =-1;
 		}
 		break;
 	default:

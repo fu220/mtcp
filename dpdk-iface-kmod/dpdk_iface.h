@@ -124,6 +124,16 @@ netdev_no_ret(struct net_device *netdev)
 	(void)netdev;
 	return;
 }
+
+
+static void
+netdev_tx_timeout(struct net_device *netdev, unsigned int txqueue)
+{
+	(void)netdev;
+	(void)txqueue;
+	return;
+}
+
 /*----------------------------------------------------------------------------*/
 /**
  * dummy tx function
@@ -146,7 +156,7 @@ static const struct net_device_ops netdev_ops = {
         .ndo_validate_addr      = netdev_open,
         .ndo_set_mac_address    = NULL,
         .ndo_change_mtu         = NULL,
-        .ndo_tx_timeout         = netdev_no_ret,
+        .ndo_tx_timeout         = netdev_tx_timeout,
         .ndo_vlan_rx_add_vid    = NULL,
         .ndo_vlan_rx_kill_vid   = NULL,
         .ndo_do_ioctl           = NULL,
@@ -174,7 +184,7 @@ static const struct net_device_ops netdev_ops = {
 /**
  * assignment function
  */
-void
+static inline void
 netdev_assign_netdev_ops(struct net_device *dev)
 {
 	dev->netdev_ops = &netdev_ops;
