@@ -13,6 +13,7 @@
 #include <rte_bus_pci.h>
 #include <rte_dev.h>
 #include <rte_bus.h>
+#include <rte_eal.h>
 #include "dpdk_iface_common.h"
 /*--------------------------------------------------------------------------*/
 //#define DEBUG				1
@@ -198,6 +199,7 @@ main(int argc, char **argv)
 					"--proc-type=auto"
 	};
 	int rte_argc = 6;
+	num_devices = 0;
 
 	ret = probe_all_rte_devices(rte_argv, &rte_argc);
 
@@ -300,6 +302,7 @@ main(int argc, char **argv)
 		fprintf(stderr, "ioctl call failed!\n");
 		return EXIT_FAILURE;
 	}
+	fprintf(stdout, "clear all previous entries.");
 	
 	/* register the newly detected dpdk ports */
 	for (ret = 0; ret < num_devices; ret++) {
@@ -344,6 +347,7 @@ main(int argc, char **argv)
 		}
 	}
 #endif	
+	rte_eal_cleanup();
 	return EXIT_SUCCESS;
 }
 /*--------------------------------------------------------------------------*/
