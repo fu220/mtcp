@@ -12,6 +12,11 @@
 #include "debug.h"
 #include "logger.h"
 
+enum {
+	IDLE_LOGT,
+	ACTIVE_LOGT
+} log_thread_state;
+
 /*----------------------------------------------------------------------------*/
 static void
 EnqueueFreeBuffer(log_thread_context *ctx, log_buff *free_bp) 

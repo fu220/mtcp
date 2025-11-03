@@ -34,7 +34,7 @@ int CreateConnectionSocket(in_addr_t addr, int port, int isNonBlocking);
 int mystrtol(const char *nptr, int base);
 
 /* processing options */
-struct Options {
+typedef struct Options {
 	char  *op_name;
 	char **op_varptr;
 	char  *op_comment;
