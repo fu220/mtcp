@@ -364,3 +364,14 @@ We tested the DPDK version (polling driver) with Linux-3.13.0 kernel.
                              April 2, 2015. 
                  EunYoung Jeong <notav at ndsl.kaist.edu>
 		 M. Asim Jamshed <ajamshed at ndsl.kaist.edu>
+
+
+
+
+========================================================================
+Fu
+
+1. Download dpdk and compile first.
+2. Running dpdk_setup.sh (sudo -E ./dpdk_setup.sh)
+3. Running setup_mtcp_dpdk_env.sh
+4. Create virtual network card

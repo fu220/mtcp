@@ -65,3 +65,8 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+
+# Fu created files
+dpdk_setup.log
+mac.log

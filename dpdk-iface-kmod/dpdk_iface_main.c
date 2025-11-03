@@ -114,7 +114,7 @@ probe_all_rte_devices(char **argv, int *argc)
 		}
 
 		for (i = 0; i < total_files; i++, pci_index++) {
-			argv[*argc] = strdup("-w");
+			argv[*argc] = strdup("-a");
 			argv[*argc + 1] = strdup(dirlist[i]->d_name);
 			if (argv[*argc] == NULL ||
 			    argv[*argc + 1] == NULL)
@@ -261,6 +261,10 @@ main(int argc, char **argv)
 #endif
 
 	fprintf(stderr, "Scanning the system for dpdk-compatible devices...");
+	fprintf(stdout, "rte_argc:%d\n",rte_argc);
+	for(int i=0 ;i < rte_argc; i++){
+		fprintf(stdout, "%s ", rte_argv[i]);
+	}
 	/* initialize the rte env first */
 	ret = rte_eal_init(rte_argc, rte_argv);
 	uint16_t port_id;

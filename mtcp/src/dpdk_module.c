@@ -420,7 +420,11 @@ dpdk_get_wptr(struct mtcp_thread_context *ctxt, int ifidx, uint16_t pktsize)
 	m = dpc->wmbufs[ifidx].m_table[len_of_mbuf];
 
 	/* retrieve the right write offset */
+#if RTE_VERSION < RTE_VERSION_NUM(19, 8, 0, 0)
 	ptr = (void *)rte_pktmbuf_mtod(m, struct ether_hdr *);
+#else
+	ptr = (void *)rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+#endif
 	m->pkt_len = m->data_len = pktsize;
 	m->nb_segs = 1;
 	m->next = NULL;
@@ -475,15 +479,22 @@ dpdk_recv_pkts(struct mtcp_thread_context *ctxt, int ifidx)
 struct rte_mbuf *
 ip_reassemble(struct dpdk_private_context *dpc, struct rte_mbuf *m)
 {
+#if RTE_VERSION < RTE_VERSION_NUM(19, 8, 0, 0)
 	struct ether_hdr *eth_hdr;
+#else
+	struct rte_eth_hdr *eth_hdr;
+#endif
 	struct rte_ip_frag_tbl *tbl;
 	struct rte_ip_frag_death_row *dr;
 
 	/* if packet is IPv4 */
 	if (RTE_ETH_IS_IPV4_HDR(m->packet_type)) {
 		struct ipv4_hdr *ip_hdr;
-
+#if RTE_VERSION < RTE_VERSION_NUM(19, 8, 0, 0)
 		eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
+#else
+		eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
+#endif
 		ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
 
 		/* if it is a fragmented packet, then try to reassemble. */
@@ -857,13 +868,23 @@ dpdk_dev_ioctl(struct mtcp_thread_context *ctx, int nif, int cmd, void *argp)
 		m = dpc->cur_rx_m;
 		//if (m->next != NULL)
 		//	rte_prefetch0(rte_pktmbuf_mtod(m->next, void *));
+#if RTE_VERSION < RTE_VERSION_NUM(19, 8, 0, 0)
 		iph = rte_pktmbuf_mtod_offset(m, struct iphdr *, sizeof(struct ether_hdr));
+#else
+		iph = rte_pktmbuf_mtod_offset(m, struct iphdr *, sizeof(struct rte_ether_hdr));
+#endif
 		tcph = (struct tcphdr *)((u_char *)iph + (iph->ihl << 2));
 		payload = (uint8_t *)tcph + (tcph->doff << 2);
 
+#if RTE_VERSION < RTE_VERSION_NUM(19, 8, 0, 0)
 		seg_off = m->data_len -
 			sizeof(struct ether_hdr) - (iph->ihl << 2) -
 			(tcph->doff << 2);
+#else
+		seg_off = m->data_len -
+			sizeof(struct rte_ether_hdr) - (iph->ihl << 2) -
+			(tcph->doff << 2);
+#endif
 
 		to = (uint8_t *) argp;
 		m = m->next;
