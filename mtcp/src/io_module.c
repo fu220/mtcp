@@ -98,6 +98,49 @@ GetNumQueues()
 #endif /* !PSIO */
 /*----------------------------------------------------------------------------*/
 #ifndef DISABLE_DPDK
+
+static int
+get_pci_from_sysfs(const char *dev_name, PciDevice *pd)
+{
+	char path[256];
+	
+	// 构建 sysfs 路径: /sys/class/net/<dev_name>/device/uevent
+	snprintf(path, sizeof(path), "/sys/class/net/%s/device/uevent", dev_name);
+	int ret;
+	FILE* fp = fopen(path, "r");
+	char line[256];
+	char pci_addr[32];
+	short unsigned int domain;
+	unsigned char bus,device,function;
+	while(fgets(line,sizeof(line),fp)) {
+		if(sscanf(line, "PCI_SLOT_NAME=%s", pci_addr)==1) {
+			printf("pci_slot_name=%s\n",pci_addr);
+			ret = sscanf(pci_addr, PCI_DOM":"PCI_BUS":"PCI_DEVICE"."PCI_FUNC,&domain, &bus, &device,&function);
+			if(ret ==4) break;
+		}
+	}
+	fclose(fp);
+	pd->pa.domain = domain;
+	pd->pa.bus = bus;
+	pd->pa.device =device;
+	pd->pa.function = function;
+
+	// 尝试获取 NUMA 节点
+	snprintf(path, sizeof(path), "/sys/class/net/%s/device/numa_node", dev_name);
+	FILE *f = fopen(path, "r");
+	if (f != NULL) {
+		if (fscanf(f, "%d", &pd->numa_socket) != 1) {
+			pd->numa_socket = 0; // 默认值
+		}
+		fclose(f);
+	} else {
+		pd->numa_socket = 0; // 默认值
+	}
+	
+	
+	return 0;
+}
+
 /**
  * returns max numa ID while probing for rte devices
  */
@@ -120,14 +163,20 @@ probe_all_rte_devices(char **argv, int *argc, char *dev_name_list)
 	if (fd != -1) {
 		dev_token = strtok_r(dev_tokenizer, delim, &saveptr);
 		while (dev_token != NULL) {
+			printf("deal with %s,strlen=%ld\n",dev_token,strlen(dev_token));
+			if(strlen(dev_token)<=1) goto loop_over;
 			strcpy(pd.ifname, dev_token);
-			if (ioctl(fd, FETCH_PCI_ADDRESS, &pd) == -1) {
-				TRACE_DBG("Could not find pci info on dpdk "
+			// if (ioctl(fd, FETCH_PCI_ADDRESS, &pd) == -1) {
+			if(1) {
+				printf("%s failed from ioctl,try to use sysfs\n",dev_token);
+				if (get_pci_from_sysfs(dev_token, &pd) == -1) {
+					TRACE_DBG("Could not find pci info on dpdk "
 					  "device: %s. Is it a dpdk-attached "
 					  "interface?\n", dev_token);
-				goto loop_over;
+					goto loop_over;
+				}	
 			}
-			argv[*argc] = strdup("-w");
+			argv[*argc] = strdup("-a");
 			argv[*argc + 1] = calloc(PCI_LENGTH, 1);
 			if (argv[*argc] == NULL ||
 			    argv[*argc + 1] == NULL) {
