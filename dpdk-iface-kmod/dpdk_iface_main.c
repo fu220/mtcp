@@ -310,8 +310,8 @@ main(int argc, char **argv)
 	
 	/* register the newly detected dpdk ports */
 	for (ret = 0; ret < num_devices; ret++) {
-		if (strcmp(di[ret].dev_details.driver_name, "net_mlx4") &&
-		    strcmp(di[ret].dev_details.driver_name, "net_mlx5")) {
+		if (strcmp(di[ret].dev_details.driver_name, "mlx4_pci") &&
+		    strcmp(di[ret].dev_details.driver_name, "mlx5_pci")) {
 			fprintf(stderr, "Registering port %d (%02X:%02X:%02X:%02X:%02X:%02X) to mTCP stack",
 				ret,
 				di[ret].ports_eth_addr.addr_bytes[0],

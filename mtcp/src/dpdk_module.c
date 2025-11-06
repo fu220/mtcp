@@ -733,7 +733,7 @@ dpdk_load_module(void)
 			/* init port */
 			printf("Initializing port %u... ", (unsigned) portid);
 			fflush(stdout);
-			if (!strncmp(dev_info[portid].driver_name, "net_mlx", 7))
+			if (!strncmp(dev_info[portid].driver_name, "mlx5_pci", 8))
 				port_conf.rx_adv_conf.rss_conf.rss_key_len = 40;
 			
 			ret = rte_eth_dev_configure(portid, CONFIG.num_cores, CONFIG.num_cores, &port_conf);

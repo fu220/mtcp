@@ -374,7 +374,7 @@ Fu
 1. Download dpdk and compile first.
 2. Running dpdk_setup.sh (sudo -E ./dpdk_setup.sh)
 3. Running setup_mtcp_dpdk_env.sh
-4. Create virtual network card
+4. set ip address using `sudo ip addr add 10.0.0.1/24 dev`
 5. ./configure --with-dpdk-lib=$RTE_SDK
 6. make
-6. Run app!
+6. Run app! (eg. sudo ./epserver -p 123 -f epserver.conf -N 4)
