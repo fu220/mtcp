@@ -104,11 +104,11 @@ native_server.o: native_server.c
 	$(MSG) "   CC $<"
 	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
 
-nativer_server: native_server.o ${UTIL_FOR_EXAMPLE_OBJ}
+native_server: native_server.o ${UTIL_FOR_EXAMPLE_OBJ}
 	$(MSG) "   LD $<"
 	$(HIDE) ${CC} $^ -lpthread -lnuma -lrt -o $@
 
-nativer_wget.o: native_wget.c
+native_wget.o: native_wget.c
 	$(MSG) "   CC $<"
 	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
 
