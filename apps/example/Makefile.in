@@ -102,7 +102,7 @@ NATIVE_INC = -I./include/ ${UTIL_INC} -I${UTIL_FLD}/include
 
 native_server.o: native_server.c 
 	$(MSG) "   CC $<"
-	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
+	$(HIDE) ${CC} -c $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
 
 native_server: native_server.o ${UTIL_FOR_EXAMPLE_OBJ}
 	$(MSG) "   LD $<"
@@ -110,7 +110,7 @@ native_server: native_server.o ${UTIL_FOR_EXAMPLE_OBJ}
 
 native_wget.o: native_wget.c
 	$(MSG) "   CC $<"
-	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
+	$(HIDE) ${CC} -c $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
 
 native_wget: native_wget.o ${UTIL_FOR_EXAMPLE_OBJ}
 	$(MSG) "   LD $<"
