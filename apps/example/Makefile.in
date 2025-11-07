@@ -1,6 +1,6 @@
 # TODO: Make this Makefile.in pretty
 
-TARGETS = epserver epwget
+TARGETS = epserver epwget native_server native_wget
 CC=@CC@ -g -O3 -Wall -Werror -fgnu89-inline
 DPDK=@DPDK@
 PS=@PSIO@
@@ -23,6 +23,8 @@ MTCP_TARGET = ${MTCP_LIB}/libmtcp.a
 UTIL_FLD = ../../util
 UTIL_INC = -I${UTIL_FLD}/include
 UTIL_OBJ = ${UTIL_FLD}/http_parsing.o ${UTIL_FLD}/tdate_parse.o ${UTIL_FLD}/netlib.o
+UTIL_FOR_EXAMPLE_OBJ = ${UTIL_OBJ} ${UTIL_FLD}/cpu.o  # because mtcp write cpu.h into mtcp/src
+
 
 # util library and header
 INC = -I./include/ ${UTIL_INC} ${MTCP_INC} -I${UTIL_FLD}/include
@@ -76,7 +78,7 @@ LIBS += -L$(LIBCCP) -lccp -lstartccp
 INC += -I$(LIBCCP)
 endif
 
-all: epserver epwget
+all: epserver epwget native_server native_wget
 
 epserver.o: epserver.c
 	$(MSG) "   CC $<"
@@ -93,6 +95,26 @@ epwget.o: epwget.c
 epwget: epwget.o ${MTCP_FLD}/lib/libmtcp.a
 	$(MSG) "   LD $<"
 	$(HIDE) ${CC} $< ${LIBS} ${UTIL_OBJ} -o $@
+
+# Native Linux versions (for benchmark)
+
+NATIVE_INC = -I./include/ ${UTIL_INC} -I${UTIL_FLD}/include
+
+native_server.o: native_server.c 
+	$(MSG) "   CC $<"
+	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
+
+nativer_server: native_server.o ${UTIL_FOR_EXAMPLE_OBJ}
+	$(MSG) "   LD $<"
+	$(HIDE) ${CC} $^ -lpthread -lnuma -lrt -o $@
+
+nativer_wget.o: native_wget.c
+	$(MSG) "   CC $<"
+	$(HIDE) ${CC} $< ${CFLAGS} ${NATIVE_INC} -DMTCP_DISABLED
+
+native_wget: native_wget.o ${UTIL_FOR_EXAMPLE_OBJ}
+	$(MSG) "   LD $<"
+	$(HIDE) ${CC} $^ -lpthread -lnuma -lrt -o $@
 
 clean:
 	$(MSG) "   CLEAN $(TARGETS)"
