@@ -140,7 +140,8 @@ struct wget_vars
 	struct timeval t_start;
 	struct timeval t_end;
 	
-	int fd;
+	int sockid;  /* Socket file descriptor */
+	int fd;      /* Output file descriptor (if fio is enabled) */
 };
 
 /*----------------------------------------------------------------------------*/
@@ -184,6 +185,7 @@ CreateConnection(thread_context_t ctx)
 	int flags;
 	int nodelay = 1;
 	int quickack = 1;
+	struct wget_vars *wv;
 
 	sockid = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockid < 0) {
@@ -207,7 +209,16 @@ CreateConnection(thread_context_t ctx)
 	setsockopt(sockid, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 	setsockopt(sockid, IPPROTO_TCP, TCP_QUICKACK, &quickack, sizeof(quickack));
 
-	memset(&ctx->wvars[sockid], 0, sizeof(struct wget_vars));
+	/* Allocate wget_vars for this socket */
+	wv = (struct wget_vars *)calloc(1, sizeof(struct wget_vars));
+	if (!wv) {
+		perror("calloc");
+		TRACE_ERROR("Failed to allocate wget_vars for socket %d\n", sockid);
+		close(sockid);
+		return -1;
+	}
+	wv->sockid = sockid;
+	wv->fd = -1;  /* File descriptor will be set in SendHTTPRequest if fio is enabled */
 
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = daddr;
@@ -217,6 +228,7 @@ CreateConnection(thread_context_t ctx)
 	if (ret < 0) {
 		if (errno != EINPROGRESS) {
 			perror("connect");
+			free(wv);
 			close(sockid);
 			return -1;
 		}
@@ -227,7 +239,7 @@ CreateConnection(thread_context_t ctx)
 	ctx->stat.connects++;
 
 	ev.events = EPOLLOUT;  /* Level-triggered mode */
-	ev.data.fd = sockid;
+	ev.data.ptr = wv;  /* Store wget_vars pointer instead of fd */
 	epoll_ctl(ctx->ep, EPOLL_CTL_ADD, sockid, &ev);
 
 	return sockid;
@@ -235,10 +247,15 @@ CreateConnection(thread_context_t ctx)
 
 /*----------------------------------------------------------------------------*/
 static inline void 
-CloseConnection(thread_context_t ctx, int sockid)
+CloseConnection(thread_context_t ctx, int sockid, struct wget_vars *wv)
 {
 	epoll_ctl(ctx->ep, EPOLL_CTL_DEL, sockid, NULL);
 	close(sockid);
+	if (wv) {
+		if (fio && wv->fd > 0)
+			close(wv->fd);
+		free(wv);
+	}
 	ctx->pending--;
 	ctx->done++;
 	assert(ctx->pending >= 0);
@@ -289,7 +306,7 @@ SendHTTPRequest(thread_context_t ctx, int sockid, struct wget_vars *wv)
 	wv->request_sent = TRUE;
 
 	ev.events = EPOLLIN;
-	ev.data.fd = sockid;
+	ev.data.ptr = wv;  /* Store wget_vars pointer */
 	epoll_ctl(ctx->ep, EPOLL_CTL_MOD, sockid, &ev);
 
 	gettimeofday(&wv->t_start, NULL);
@@ -315,7 +332,6 @@ DownloadComplete(thread_context_t ctx, int sockid, struct wget_vars *wv)
 
 	TRACE_APP("Socket %d File download complete!\n", sockid);
 	gettimeofday(&wv->t_end, NULL);
-	CloseConnection(ctx, sockid);
 	ctx->stat.completes++;
 	if (response_size == 0) {
 		response_size = wv->recv;
@@ -339,8 +355,7 @@ DownloadComplete(thread_context_t ctx, int sockid, struct wget_vars *wv)
 	if (tdiff > ctx->stat.max_resp_time)
 		ctx->stat.max_resp_time = tdiff;
 
-	if (fio && wv->fd > 0)
-		close(wv->fd);
+	CloseConnection(ctx, sockid, wv);
 
 	return 0;
 }
@@ -379,7 +394,7 @@ HandleReadEvent(thread_context_t ctx, int sockid, struct wget_vars *wv)
 					/* failed to find the Content-Length field */
 					wv->recv += rd;
 					rd = 0;
-					CloseConnection(ctx, sockid);
+					CloseConnection(ctx, sockid, wv);
 					return 0;
 				}
 
@@ -399,7 +414,7 @@ HandleReadEvent(thread_context_t ctx, int sockid, struct wget_vars *wv)
 				rd = 0;
 				ctx->stat.errors++;
 				ctx->errors++;
-				CloseConnection(ctx, sockid);
+				CloseConnection(ctx, sockid, wv);
 				return 0;
 			}
 		}
@@ -444,7 +459,7 @@ HandleReadEvent(thread_context_t ctx, int sockid, struct wget_vars *wv)
 		} else {
 			ctx->stat.errors++;
 			ctx->incompletes++;
-			CloseConnection(ctx, sockid);
+			CloseConnection(ctx, sockid, wv);
 		}
 
 	} else if (rd < 0) {
@@ -453,7 +468,7 @@ HandleReadEvent(thread_context_t ctx, int sockid, struct wget_vars *wv)
 					sockid, strerror(errno));
 			ctx->stat.errors++;
 			ctx->errors++;
-			CloseConnection(ctx, sockid);
+			CloseConnection(ctx, sockid, wv);
 		}
 	}
 
@@ -544,7 +559,6 @@ RunWgetMain(void *arg)
 	int ep;
 	struct epoll_event *events;
 	int nevents;
-	struct wget_vars *wvars;
 	int i;
 
 	struct timeval cur_tv, prev_tv;
@@ -593,12 +607,8 @@ RunWgetMain(void *arg)
 	}
 	ctx->ep = ep;
 
-	wvars = (struct wget_vars *)calloc(max_fds, sizeof(struct wget_vars));
-	if (!wvars) {
-		TRACE_ERROR("Failed to create wget variables!\n");
-		exit(EXIT_FAILURE);
-	}
-	ctx->wvars = wvars;
+	/* wget_vars are now dynamically allocated per socket in CreateConnection */
+	ctx->wvars = NULL;
 
 	ctx->started = ctx->done = ctx->pending = 0;
 	ctx->errors = ctx->incompletes = 0;
@@ -639,36 +649,41 @@ RunWgetMain(void *arg)
 		}
 
 		for (i = 0; i < nevents; i++) {
+			struct wget_vars *wv = (struct wget_vars *)events[i].data.ptr;
+			int sockid;
+
+			if (!wv) {
+				TRACE_ERROR("Invalid wget_vars pointer in epoll event\n");
+				continue;
+			}
+			sockid = wv->sockid;
 
 			if (events[i].events & EPOLLERR) {
 				int err;
 				socklen_t len = sizeof(err);
 
 				TRACE_APP("[CPU %d] Error on socket %d\n", 
-						core, events[i].data.fd);
+						core, sockid);
 				ctx->stat.errors++;
 				ctx->errors++;
-				if (getsockopt(events[i].data.fd, 
+				if (getsockopt(sockid, 
 							SOL_SOCKET, SO_ERROR, (void *)&err, &len) == 0) {
 					if (err == ETIMEDOUT)
 						ctx->stat.timedout++;
 				}
-				CloseConnection(ctx, events[i].data.fd);
+				CloseConnection(ctx, sockid, wv);
 
 			} else if (events[i].events & EPOLLIN) {
-				HandleReadEvent(ctx, 
-						events[i].data.fd, &wvars[events[i].data.fd]);
+				HandleReadEvent(ctx, sockid, wv);
 
 			} else if (events[i].events == EPOLLOUT) {
-				struct wget_vars *wv = &wvars[events[i].data.fd];
-
 				if (!wv->request_sent) {
-					SendHTTPRequest(ctx, events[i].data.fd, wv);
+					SendHTTPRequest(ctx, sockid, wv);
 				}
 
 			} else {
 				TRACE_ERROR("Socket %d: unexpected event: %x\n", 
-						events[i].data.fd, events[i].events);
+						sockid, events[i].events);
 			}
 		}
 
