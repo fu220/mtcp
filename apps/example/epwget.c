@@ -881,6 +881,20 @@ main(int argc, char **argv)
 		/* Record end time */
 		gettimeofday(&end_time, NULL);
 
+		for(i=0;i<core_limit;i++) {
+			global_stat.waits += g_stat[i]->waits;
+			global_stat.events += g_stat[i]->events;
+			global_stat.connects += g_stat[i]->connects;
+			global_stat.reads += g_stat[i]->reads;
+			global_stat.writes += g_stat[i]->writes;
+			global_stat.completes += g_stat[i]->completes;
+			global_stat.errors += g_stat[i]->errors;
+			global_stat.timedout += g_stat[i]->timedout;
+			global_stat.sum_resp_time += g_stat[i]->sum_resp_time;
+			if (g_stat[i]->max_resp_time > global_stat.max_resp_time)
+				global_stat.max_resp_time = g_stat[i]->max_resp_time;
+		}
+
 		/* Calculate elapsed time in seconds */
 		double elapsed_sec = (end_time.tv_sec - start_time.tv_sec) +
 			(end_time.tv_usec - start_time.tv_usec) / 1000000.0;
