@@ -169,7 +169,7 @@ CreateContext(int core)
 void 
 DestroyContext(thread_context_t ctx) 
 {
-	g_stat[ctx->core] = NULL;
+	// g_stat[ctx->core] = NULL;
 	close(ctx->ep);
 	free(ctx);
 }
@@ -551,7 +551,6 @@ PrintStats(double interval)
 void *
 RunWgetMain(void *arg)
 {
-	printf("RunWgetMain.\n");
 	thread_context_t ctx;
 	int core = *(int *)arg;
 	struct in_addr daddr_in;
