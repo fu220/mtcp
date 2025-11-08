@@ -147,6 +147,7 @@ struct wget_vars
 /*----------------------------------------------------------------------------*/
 static struct thread_context *g_ctx[MAX_CPUS] = {0};
 static struct wget_stat *g_stat[MAX_CPUS] = {0};
+static struct wget_stat global_stat = {0};
 
 /*----------------------------------------------------------------------------*/
 thread_context_t 
@@ -523,6 +524,18 @@ PrintStats(double interval)
 		total.errors += st->errors;
 		total.timedout += st->timedout;
 
+		global_stat.waits += st->waits;
+		global_stat.events += st->events;
+		global_stat.connects += st->connects;
+		global_stat.reads += st->reads;
+		global_stat.writes += st->writes;
+		global_stat.completes += st->completes;
+		global_stat.errors += st->errors;
+		global_stat.timedout += st->timedout;
+		global_stat.sum_resp_time += st->sum_resp_time;
+		if (st->max_resp_time > global_stat.max_resp_time)
+			global_stat.max_resp_time = st->max_resp_time;
+
 		memset(st, 0, sizeof(struct wget_stat));
 	}
 
@@ -855,43 +868,17 @@ main(int argc, char **argv)
 	/* Record end time */
 	gettimeofday(&end_time, NULL);
 
-	/* Aggregate statistics from all threads */
-	struct wget_stat total_stat = {0};
-	uint64_t total_resp_time = 0;
-	int active_threads = 0;
-
-	for (i = 0; i < core_limit; i++) {
-		thread_context_t ctx = g_ctx[i];
-		struct wget_stat *st = g_stat[i];
-
-		if (st == NULL || ctx == NULL)
-			continue;
-
-		active_threads++;
-		total_stat.waits += st->waits;
-		total_stat.events += st->events;
-		total_stat.connects += st->connects;
-		total_stat.reads += st->reads;
-		total_stat.writes += st->writes;
-		total_stat.completes += st->completes;
-		total_resp_time += st->sum_resp_time;
-		if (st->max_resp_time > total_stat.max_resp_time)
-			total_stat.max_resp_time = st->max_resp_time;
-		total_stat.errors += st->errors;
-		total_stat.timedout += st->timedout;
-	}
-
 	/* Calculate elapsed time in seconds */
 	double elapsed_sec = (end_time.tv_sec - start_time.tv_sec) +
 		(end_time.tv_usec - start_time.tv_usec) / 1000000.0;
 
 	/* Calculate total data transferred (reads + writes) */
-	uint64_t total_data = total_stat.reads + total_stat.writes;
+	uint64_t total_data = global_stat.reads + global_stat.writes;
 
 	/* Calculate average response time */
 	uint64_t avg_resp_time = 0;
-	if (total_stat.completes > 0) {
-		avg_resp_time = total_resp_time / total_stat.completes;
+	if (global_stat.completes > 0) {
+		avg_resp_time = global_stat.sum_resp_time / global_stat.completes;
 	}
 
 	/* Calculate average bandwidth (Gbps) */
@@ -908,18 +895,18 @@ main(int argc, char **argv)
 	fprintf(stdout, "Total data transferred: %lu bytes (%.2f MB)\n", 
 		total_data, (double)total_data / (1024.0 * 1024.0));
 	fprintf(stdout, "  - Received: %lu bytes (%.2f MB)\n", 
-		total_stat.reads, (double)total_stat.reads / (1024.0 * 1024.0));
+		global_stat.reads, (double)global_stat.reads / (1024.0 * 1024.0));
 	fprintf(stdout, "  - Sent: %lu bytes (%.2f MB)\n", 
-		total_stat.writes, (double)total_stat.writes / (1024.0 * 1024.0));
+		global_stat.writes, (double)global_stat.writes / (1024.0 * 1024.0));
 	fprintf(stdout, "Response time:\n");
 	fprintf(stdout, "  - Average: %lu us (%.3f ms)\n", 
 		avg_resp_time, (double)avg_resp_time / 1000.0);
 	fprintf(stdout, "  - Maximum: %lu us (%.3f ms)\n", 
-		total_stat.max_resp_time, (double)total_stat.max_resp_time / 1000.0);
+		global_stat.max_resp_time, (double)global_stat.max_resp_time / 1000.0);
 	fprintf(stdout, "Average bandwidth: %.2f Gbps (%.2f MB/s)\n", 
 		avg_bandwidth_gbps, (double)total_data / (elapsed_sec * 1024.0 * 1024.0));
 	fprintf(stdout, "Total connections: %lu (completed: %lu, errors: %lu, timeout: %lu)\n",
-		total_stat.connects, total_stat.completes, total_stat.errors, total_stat.timedout);
+		global_stat.connects, global_stat.completes, global_stat.errors, global_stat.timedout);
 	fprintf(stdout, "========================================\n");
 
 	return 0;
